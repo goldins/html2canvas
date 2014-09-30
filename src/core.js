@@ -126,15 +126,15 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
         if window url is about:blank, we can assign the url to current by writing onto the document
          */
         container.contentWindow.onload = container.onload = function() {
-          	window.setTimeout(function() {
-            	var interval = setInterval(function() {
+            window.setTimeout(function() {
+                var interval = setInterval(function() {
                     if (documentClone.body.childNodes.length > 0) {
                         cloneCanvasContents(ownerDocument, documentClone);
                         clearInterval(interval);
                         resolve(container);
                     }
-            	}, 50);
-        	}, 0);
+                }, 50);
+            }, 0);
         };
 
         documentClone.open();

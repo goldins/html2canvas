@@ -134,7 +134,7 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
                         resolve(container);
                     }
                 }, 50);
-            }, 0);
+            }, 200);
         };
 
         documentClone.open();

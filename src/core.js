@@ -50,10 +50,14 @@ function renderDocument(document, options, windowWidth, windowHeight) {
 }
 
 function renderWindow(node, container, options, windowWidth, windowHeight) {
-    var clonedWindow = container.contentWindow;
     if(typeof options.modifyFn === 'function') {
-        node = options.modifyFn(node);
+        try {
+            node = options.modifyFn(node);
+        } catch(e) {
+            log(e);
+        }
     }
+    var clonedWindow = container.contentWindow;
     var support = new Support(clonedWindow.document);
     var imageLoader = new ImageLoader(options, support);
     var bounds = getBounds(node);

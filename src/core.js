@@ -57,8 +57,15 @@ function renderWindow(node, container, options, windowWidth, windowHeight) {
     var support = new Support(clonedWindow.document);
     var imageLoader = new ImageLoader(options, support);
     var bounds = getBounds(node);
-    var width = options.width != null ? options.width : options.type === "view" ? Math.min(bounds.width, windowWidth) : documentWidth(clonedWindow.document);
-    var height = options.height != null ? options.height : options.type === "view" ? Math.min(bounds.height, windowHeight) : documentHeight(clonedWindow.document);
+    var width;
+    var height;
+    if(options.type === 'node') {
+        width = node.getBoundingClientRect().width;
+        height = node.getBoundingClientRect().height + node.getBoundingClientRect().top;
+    } else {
+        width = options.width != null ? options.width : options.type === "view" ? Math.min(bounds.width, windowWidth) : documentWidth(clonedWindow.document);
+        height = options.height != null ? options.height : options.type === "view" ? Math.min(bounds.height, windowHeight) : documentHeight(clonedWindow.document);
+    }
     var renderer = new CanvasRenderer(width, height, imageLoader, options, document);
     var parser = new NodeParser(node, renderer, support, imageLoader, options);
     return parser.ready.then(function() {

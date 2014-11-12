@@ -53,26 +53,11 @@ function renderDocument(document, options, windowWidth, windowHeight) {
 }
 
 function renderWindow(node, container, options, windowWidth, windowHeight) {
-    if(typeof options.modifyFn === 'function') {
-        try {
-            node = options.modifyFn(node);
-        } catch(e) {
-            log(e);
-        }
-    }
     var clonedWindow = container.contentWindow;
     var support = new Support(clonedWindow.document);
     var imageLoader = new ImageLoader(options, support);
-    var bounds = getBounds(node);
-    var width;
-    var height;
-    if(options.type === 'node') {
-        width = node.getBoundingClientRect().width;
-        height = node.getBoundingClientRect().height + node.getBoundingClientRect().top;
-    } else {
-        width = options.type === "view" ? windowWidth : documentWidth(clonedWindow.document);
-        height = options.type === "view" ? windowHeight : documentHeight(clonedWindow.document);
-    }
+    var width = options.type === "view" ? windowWidth : documentWidth(clonedWindow.document);
+    var height = options.type === "view" ? windowHeight : documentHeight(clonedWindow.document);
     var renderer = new CanvasRenderer(width, height, imageLoader, options, document);
     var parser = new NodeParser(node, renderer, support, imageLoader, options);
     return parser.ready.then(function() {
@@ -84,6 +69,7 @@ function renderWindow(node, container, options, windowWidth, windowHeight) {
         } else if (node === clonedWindow.document.body || node === clonedWindow.document.documentElement || options.canvas != null) {
             canvas = renderer.canvas;
         } else {
+            var bounds = getBounds(node);
             canvas = crop(renderer.canvas, {width:  options.width != null ? options.width : bounds.width, height: options.height != null ? options.height : bounds.height, top: bounds.top, left: bounds.left, x: clonedWindow.pageXOffset, y: clonedWindow.pageYOffset});
         }
 
@@ -152,18 +138,16 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
         if window url is about:blank, we can assign the url to current by writing onto the document
          */
         container.contentWindow.onload = container.onload = function() {
-            window.setTimeout(function() {
-                var interval = setInterval(function() {
-                    if (documentClone.body.childNodes.length > 0) {
-                        cloneCanvasContents(ownerDocument, documentClone);
-                        clearInterval(interval);
-                        if (options.type === "view") {
-                            container.contentWindow.scrollTo(x, y);
-                        }
-                        resolve(container);
+            var interval = setInterval(function() {
+                if (documentClone.body.childNodes.length > 0) {
+                    cloneCanvasContents(ownerDocument, documentClone);
+                    clearInterval(interval);
+                    if (options.type === "view") {
+                        container.contentWindow.scrollTo(x, y);
                     }
-                }, 50);
-            }, 200);
+                    resolve(container);
+                }
+            }, 50);
         };
 
         var x = ownerDocument.defaultView.pageXOffset;

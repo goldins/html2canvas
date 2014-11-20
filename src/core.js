@@ -45,7 +45,10 @@ function renderDocument(document, options, windowWidth, windowHeight) {
         document.querySelector(selector).removeAttribute(html2canvasNodeAttribute);
         var clonedWindow = container.contentWindow;
         var node = clonedWindow.document.querySelector(selector);
-        return renderWindow(node, container, options, windowWidth, windowHeight);
+        var oncloneHandler = (typeof(options.onclone) === "function") ? Promise.resolve(options.onclone(clonedWindow.document)) : Promise.resolve(true);
+        return oncloneHandler.then(function() {
+            return renderWindow(node, container, options, windowWidth, windowHeight);
+        });
     });
 }
 
@@ -61,20 +64,28 @@ function renderWindow(node, container, options, windowWidth, windowHeight) {
     var support = new Support(clonedWindow.document);
     var imageLoader = new ImageLoader(options, support);
     var bounds = getBounds(node);
-    var width;
-    var height;
+    var width, height;
     if(options.type === 'node') {
         width = typeof options.width === 'number' ? options.width : node.getBoundingClientRect().width;
         height = typeof options.height === 'number' ? options.height : node.getBoundingClientRect().height;
     } else {
-        width = options.width != null ? options.width : options.type === "view" ? Math.min(bounds.width, windowWidth) : documentWidth(clonedWindow.document);
-        height = options.height != null ? options.height : options.type === "view" ? Math.min(bounds.height, windowHeight) : documentHeight(clonedWindow.document);
+        width = options.type === "view" ? windowWidth : documentWidth(clonedWindow.document);
+        height = options.type === "view" ? windowHeight : documentHeight(clonedWindow.document);
     }
     var renderer = new CanvasRenderer(width, height, imageLoader, options, document);
     var parser = new NodeParser(node, renderer, support, imageLoader, options);
     return parser.ready.then(function() {
         log("Finished rendering");
-        var canvas = (options.type !== "view" && (node === clonedWindow.document.body || node === clonedWindow.document.documentElement || options.canvas != null)) ? renderer.canvas : crop(renderer.canvas, {width: width, height: height, top: bounds.top, left: bounds.left});
+        var canvas;
+
+        if (options.type === "view") {
+            canvas = crop(renderer.canvas, {width: renderer.canvas.width, height: renderer.canvas.height, top: 0, left: 0, x: 0, y: 0});
+        } else if (node === clonedWindow.document.body || node === clonedWindow.document.documentElement || options.canvas != null) {
+            canvas = renderer.canvas;
+        } else {
+            canvas = crop(renderer.canvas, {width:  options.width != null ? options.width : bounds.width, height: options.height != null ? options.height : bounds.height, top: bounds.top, left: bounds.left, x: clonedWindow.pageXOffset, y: clonedWindow.pageYOffset});
+        }
+
         cleanupContainer(container, options);
         return canvas;
     });
@@ -93,11 +104,11 @@ function crop(canvas, bounds) {
     var x2 = Math.min(canvas.width, Math.max(1, bounds.left + bounds.width));
     var y1 = Math.min(canvas.height - 1, Math.max(0, bounds.top));
     var y2 = Math.min(canvas.height, Math.max(1, bounds.top + bounds.height));
-    var width = croppedCanvas.width = x2 - x1;
-    var height = croppedCanvas.height =  y2 - y1;
-    log("Cropping canvas at:", "left:", bounds.left, "top:", bounds.top, "width:", bounds.width, "height:", bounds.height);
-    log("Resulting crop with width", width, "and height", height, " with x", x1, "and y", y1);
-    croppedCanvas.getContext("2d").drawImage(canvas, x1, y1, width, height, 0, 0, width, height);
+    croppedCanvas.width = bounds.width;
+    croppedCanvas.height =  bounds.height;
+    log("Cropping canvas at:", "left:", bounds.left, "top:", bounds.top, "width:", (x2-x1), "height:", (y2-y1));
+    log("Resulting crop with width", bounds.width, "and height", bounds.height, " with x", x1, "and y", y1);
+    croppedCanvas.getContext("2d").drawImage(canvas, x1, y1, x2-x1, y2-y1, bounds.x, bounds.y, x2-x1, y2-y1);
     return croppedCanvas;
 }
 
@@ -140,25 +151,30 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
         if window url is about:blank, we can assign the url to current by writing onto the document
          */
         container.contentWindow.onload = container.onload = function() {
-            window.setTimeout(function() {
-                var interval = setInterval(function() {
-                    if (documentClone.body.childNodes.length > 0) {
-                        cloneCanvasContents(ownerDocument, documentClone);
-                        clearInterval(interval);
-                        resolve(container);
+            var interval = setInterval(function() {
+                if (documentClone.body.childNodes.length > 0) {
+                    cloneCanvasContents(ownerDocument, documentClone);
+                    clearInterval(interval);
+                    if (options.type === "view") {
+                        container.contentWindow.scrollTo(x, y);
                     }
-                }, 50);
-            }, 200);
+                    resolve(container);
+                }
+            }, 50);
         };
 
-        documentClone.open();
-        documentClone.write("<!DOCTYPE html>");
-        documentClone.close();
+        var x = ownerDocument.defaultView.pageXOffset;
+        var y = ownerDocument.defaultView.pageYOffset;
 
-        documentClone.replaceChild(options.javascriptEnabled === true ? documentClone.adoptNode(documentElement) : removeScriptNodes(documentClone.adoptNode(documentElement)), documentClone.documentElement);
-        if (options.type === "view") {
-            container.contentWindow.scrollTo(window.pageXOffset, window.pageYOffset);
+        documentClone.open();
+        documentClone.write("<!DOCTYPE html><html></html>");
+
+        // Chrome scrolls the parent document for some reason after the write to the cloned window???
+        if (x !== ownerDocument.defaultView.pageXOffset || y !== ownerDocument.defaultView.pageYOffset) {
+            ownerDocument.defaultView.scrollTo(x, y);
         }
+        documentClone.replaceChild(options.javascriptEnabled === true ? documentClone.adoptNode(documentElement) : removeScriptNodes(documentClone.adoptNode(documentElement)), documentClone.documentElement);
+        documentClone.close();
     });
 }
 
@@ -241,3 +257,4 @@ function absoluteUrl(url) {
     link.href = link.href;
     return link;
 }
+

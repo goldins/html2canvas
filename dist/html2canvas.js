@@ -632,8 +632,8 @@ function renderWindow(node, container, options, windowWidth, windowHeight) {
     var width;
     var height;
     if(options.type === 'node') {
-        width = options.width !== null ? options.width : node.getBoundingClientRect().width;
-        height = options.height !== null ? options.height : node.getBoundingClientRect().height;
+        width = typeof options.width === 'number' ? options.width : node.getBoundingClientRect().width;
+        height = typeof options.height === 'number' ? options.height : node.getBoundingClientRect().height;
     } else {
         width = options.width != null ? options.width : options.type === "view" ? Math.min(bounds.width, windowWidth) : documentWidth(clonedWindow.document);
         height = options.height != null ? options.height : options.type === "view" ? Math.min(bounds.height, windowHeight) : documentHeight(clonedWindow.document);

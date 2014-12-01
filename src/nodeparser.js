@@ -14,16 +14,18 @@ function NodeParser(element, renderer, support, imageLoader, options) {
     }
     parent.visibile = parent.isElementVisible();
     this.createPseudoHideStyles(element.ownerDocument);
+    this.disableAnimations(element.ownerDocument);
     this.nodes = flatten([parent].concat(this.getChildren(parent)).filter(function(container) {
         return container.visible = container.isElementVisible();
     }).map(this.getPseudoElements, this));
     this.fontMetrics = new FontMetrics();
     log("Fetched nodes, total:", this.nodes.length);
+    log("Calculate overflow clips");
+    this.calculateOverflowClips();
+    log("Start fetching images");
     this.images = imageLoader.fetch(this.nodes.filter(isElement));
     this.ready = this.images.ready.then(bind(function() {
         log("Images loaded, starting parsing");
-        log("Calculate overflow clips");
-        this.calculateOverflowClips();
         log("Creating stacking contexts");
         this.createStackingContexts();
         log("Sorting stacking contexts");
@@ -36,9 +38,11 @@ function NodeParser(element, renderer, support, imageLoader, options) {
                 resolve();
             } else if (typeof(options.async) === "function") {
                 options.async.call(this, this.renderQueue, resolve);
-            } else {
+            } else if (this.renderQueue.length > 0){
                 this.renderIndex = 0;
                 this.asyncRenderer(this.renderQueue, resolve);
+            } else {
+                resolve();
             }
         }, this));
     }, this));
@@ -47,14 +51,31 @@ function NodeParser(element, renderer, support, imageLoader, options) {
 NodeParser.prototype.calculateOverflowClips = function() {
     this.nodes.forEach(function(container) {
         if (isElement(container)) {
+            if (isPseudoElement(container)) {
+                container.appendToDOM();
+            }
             container.borders = this.parseBorders(container);
             var clip = (container.css('overflow') === "hidden") ? [container.borders.clip] : [];
+            var cssClip = container.parseClip();
+            if (cssClip && ["absolute", "fixed"].indexOf(container.css('position')) !== -1) {
+                clip.push([["rect",
+                        container.bounds.left + cssClip.left,
+                        container.bounds.top + cssClip.top,
+                        cssClip.right - cssClip.left,
+                        cssClip.bottom - cssClip.top
+                ]]);
+            }
             container.clip = hasParentClip(container) ? container.parent.clip.concat(clip) : clip;
             container.backgroundClip = (container.css('overflow') !== "hidden") ? container.clip.concat([container.borders.clip]) : container.clip;
+            if (isPseudoElement(container)) {
+                container.cleanDOM();
+            }
         } else if (isTextNode(container)) {
             container.clip = hasParentClip(container) ? container.parent.clip : [];
         }
-        container.bounds = null;
+        if (!isPseudoElement(container)) {
+            container.bounds = null;
+        }
     }, this);
 };
 
@@ -77,9 +98,18 @@ NodeParser.prototype.asyncRenderer = function(queue, resolve, asyncTimer) {
 };
 
 NodeParser.prototype.createPseudoHideStyles = function(document) {
+    this.createStyles(document, '.' + PseudoElementContainer.prototype.PSEUDO_HIDE_ELEMENT_CLASS_BEFORE + ':before { content: "" !important; display: none !important; }' +
+        '.' + PseudoElementContainer.prototype.PSEUDO_HIDE_ELEMENT_CLASS_AFTER + ':after { content: "" !important; display: none !important; }');
+};
+
+NodeParser.prototype.disableAnimations = function(document) {
+    this.createStyles(document, '* { -webkit-animation: none !important; -moz-animation: none !important; -o-animation: none !important; animation: none !important; ' +
+        '-webkit-transition: none !important; -moz-transition: none !important; -o-transition: none !important; transition: none !important;}');
+};
+
+NodeParser.prototype.createStyles = function(document, styles) {
     var hidePseudoElements = document.createElement('style');
-    hidePseudoElements.innerHTML = '.' + this.pseudoHideClass + ':before { content: "" !important; display: none !important; }' +
-        '.' + this.pseudoHideClass + ':after { content: "" !important; display: none !important; }';
+    hidePseudoElements.innerHTML = styles;
     document.body.appendChild(hidePseudoElements);
 };
 
@@ -90,17 +120,11 @@ NodeParser.prototype.getPseudoElements = function(container) {
         var after = this.getPseudoElement(container, ":after");
 
         if (before) {
-            container.node.insertBefore(before[0].node, container.node.firstChild);
             nodes.push(before);
         }
 
         if (after) {
-            container.node.appendChild(after[0].node);
             nodes.push(after);
-        }
-
-        if (before || after) {
-            container.node.className += " " + this.pseudoHideClass;
         }
     }
     return flatten(nodes);
@@ -121,14 +145,14 @@ NodeParser.prototype.getPseudoElement = function(container, type) {
     var content = stripQuotes(style.content);
     var isImage = content.substr(0, 3) === 'url';
     var pseudoNode = document.createElement(isImage ? 'img' : 'html2canvaspseudoelement');
-    var pseudoContainer = new NodeContainer(pseudoNode, container);
+    var pseudoContainer = new PseudoElementContainer(pseudoNode, container, type);
 
     for (var i = style.length-1; i >= 0; i--) {
         var property = toCamelCase(style.item(i));
         pseudoNode.style[property] = style[property];
     }
 
-    pseudoNode.className = this.pseudoHideClass;
+    pseudoNode.className = PseudoElementContainer.prototype.PSEUDO_HIDE_ELEMENT_CLASS_BEFORE + " " + PseudoElementContainer.prototype.PSEUDO_HIDE_ELEMENT_CLASS_AFTER;
 
     if (isImage) {
         pseudoNode.src = parseBackgrounds(content)[0].args[0];
@@ -149,12 +173,8 @@ NodeParser.prototype.getChildren = function(parentContainer) {
 };
 
 NodeParser.prototype.newStackingContext = function(container, hasOwnStacking) {
-    var stack = new StackingContext(hasOwnStacking, container.cssFloat('opacity'), container.node, container.parent);
-    stack.visible = container.visible;
-    stack.borders = container.borders;
-    stack.bounds = container.bounds;
-    stack.clip = container.clip;
-    stack.backgroundClip = container.backgroundClip;
+    var stack = new StackingContext(hasOwnStacking, container.getOpacity(), container.node, container.parent);
+    container.cloneTo(stack);
     var parentStack = hasOwnStacking ? stack.getParentStack(this) : stack.parent.stack;
     parentStack.contexts.push(stack);
     container.stack = stack;
@@ -181,7 +201,7 @@ NodeParser.prototype.isRootElement = function(container) {
 };
 
 NodeParser.prototype.sortStackingContexts = function(stack) {
-    stack.contexts.sort(zIndexSort);
+    stack.contexts.sort(zIndexSort(stack.contexts.slice(0)));
     stack.contexts.forEach(this.sortStackingContexts, this);
 };
 
@@ -251,7 +271,13 @@ NodeParser.prototype.paint = function(container) {
         if (container instanceof ClearTransform) {
             this.renderer.ctx.restore();
         } else if (isTextNode(container)) {
+            if (isPseudoElement(container.parent)) {
+                container.parent.appendToDOM();
+            }
             this.paintText(container);
+            if (isPseudoElement(container.parent)) {
+                container.parent.cleanDOM();
+            }
         } else {
             this.paintNode(container);
         }
@@ -268,6 +294,7 @@ NodeParser.prototype.paintNode = function(container) {
             this.renderer.setTransform(container.parseTransform());
         }
     }
+
     var bounds = container.parseBounds();
     this.renderer.clip(container.backgroundClip, function() {
         this.renderer.renderBackground(container, bounds, container.borders.borders.map(getWidth));
@@ -275,7 +302,9 @@ NodeParser.prototype.paintNode = function(container) {
 
     this.renderer.clip(container.clip, function() {
         this.renderer.renderBorders(container.borders.borders);
+    }, this);
 
+    this.renderer.clip(container.backgroundClip, function() {
         switch (container.node.nodeName) {
         case "svg":
         case "IFRAME":
@@ -324,7 +353,7 @@ NodeParser.prototype.paintFormValue = function(container) {
             }
         });
         var bounds = container.parseBounds();
-        wrapper.style.position = "absolute";
+        wrapper.style.position = "fixed";
         wrapper.style.left = bounds.left + "px";
         wrapper.style.top = bounds.top + "px";
         wrapper.textContent = container.getValue();
@@ -481,8 +510,6 @@ NodeParser.prototype.parseBackgroundClip = function(container, borderPoints, bor
     return borderArgs;
 };
 
-NodeParser.prototype.pseudoHideClass = "___html2canvas___pseudoelement";
-
 function getCurvePoints(x, y, r1, r2) {
     var kappa = 4 * ((Math.sqrt(2) - 1) / 3);
     var ox = (r1) * kappa, // control point offset horizontal
@@ -523,9 +550,9 @@ function calculateCurvePoints(bounds, borderRadius, borders) {
         topRightOuter: getCurvePoints(x + topWidth, y, trh, trv).topRight.subdivide(0.5),
         topRightInner: getCurvePoints(x + Math.min(topWidth, width + borders[3].width), y + borders[0].width, (topWidth > width + borders[3].width) ? 0 :trh - borders[3].width, trv - borders[0].width).topRight.subdivide(0.5),
         bottomRightOuter: getCurvePoints(x + bottomWidth, y + rightHeight, brh, brv).bottomRight.subdivide(0.5),
-        bottomRightInner: getCurvePoints(x + Math.min(bottomWidth, width + borders[3].width), y + Math.min(rightHeight, height + borders[0].width), Math.max(0, brh - borders[1].width), Math.max(0, brv - borders[2].width)).bottomRight.subdivide(0.5),
+        bottomRightInner: getCurvePoints(x + Math.min(bottomWidth, width - borders[3].width), y + Math.min(rightHeight, height + borders[0].width), Math.max(0, brh - borders[1].width),  brv - borders[2].width).bottomRight.subdivide(0.5),
         bottomLeftOuter: getCurvePoints(x, y + leftHeight, blh, blv).bottomLeft.subdivide(0.5),
-        bottomLeftInner: getCurvePoints(x + borders[3].width, y + leftHeight, Math.max(0, blh - borders[3].width), Math.max(0, blv - borders[2].width)).bottomLeft.subdivide(0.5)
+        bottomLeftInner: getCurvePoints(x + borders[3].width, y + leftHeight, Math.max(0, blh - borders[3].width), blv - borders[2].width).bottomLeft.subdivide(0.5)
     };
 }
 
@@ -676,16 +703,22 @@ function isElement(container) {
     return container.node.nodeType === Node.ELEMENT_NODE;
 }
 
+function isPseudoElement(container) {
+    return container.isPseudoElement === true;
+}
+
 function isTextNode(container) {
     return container.node.nodeType === Node.TEXT_NODE;
 }
 
-function zIndexSort(a, b) {
-    return a.cssInt("zIndex") - b.cssInt("zIndex");
+function zIndexSort(contexts) {
+    return function(a, b) {
+        return (a.cssInt("zIndex") + (contexts.indexOf(a) / contexts.length)) - (b.cssInt("zIndex") + (contexts.indexOf(b) / contexts.length));
+    };
 }
 
 function hasOpacity(container) {
-    return container.css("opacity") < 1;
+    return container.getOpacity() < 1;
 }
 
 function bind(callback, context) {

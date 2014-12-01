@@ -56,14 +56,20 @@ function renderWindow(node, container, options, windowWidth, windowHeight) {
     var clonedWindow = container.contentWindow;
     var support = new Support(clonedWindow.document);
     var imageLoader = new ImageLoader(options, support);
+<<<<<<< HEAD
+    var bounds = getBounds(node);
     var width, height;
-    if(options.type === "node") {
-        width = typeof options.width === "number" ? options.width : node.getBoundingClientRect().width;
-        height = typeof options.height === "number" ? options.height : node.getBoundingClientRect().height;
+    if(options.type === 'node') {
+        width = typeof options.width === 'number' ? options.width : node.getBoundingClientRect().width;
+        height = typeof options.height === 'number' ? options.height : node.getBoundingClientRect().height;
     } else {
         width = options.type === "view" ? windowWidth : documentWidth(clonedWindow.document);
         height = options.type === "view" ? windowHeight : documentHeight(clonedWindow.document);
     }
+=======
+    var width = options.type === "view" ? windowWidth : documentWidth(clonedWindow.document);
+    var height = options.type === "view" ? windowHeight : documentHeight(clonedWindow.document);
+>>>>>>> master
     var renderer = new CanvasRenderer(width, height, imageLoader, options, document);
     var parser = new NodeParser(node, renderer, support, imageLoader, options);
     return parser.ready.then(function() {
@@ -75,7 +81,10 @@ function renderWindow(node, container, options, windowWidth, windowHeight) {
         } else if (node === clonedWindow.document.body || node === clonedWindow.document.documentElement || options.canvas != null) {
             canvas = renderer.canvas;
         } else {
+<<<<<<< HEAD
+=======
             var bounds = getBounds(node);
+>>>>>>> master
             canvas = crop(renderer.canvas, {width:  options.width != null ? options.width : bounds.width, height: options.height != null ? options.height : bounds.height, top: bounds.top, left: bounds.left, x: clonedWindow.pageXOffset, y: clonedWindow.pageYOffset});
         }
 
@@ -161,6 +170,7 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
 
         var x = ownerDocument.defaultView.pageXOffset;
         var y = ownerDocument.defaultView.pageYOffset;
+<<<<<<< HEAD
 
         documentClone.open();
         documentClone.write("<!DOCTYPE html><html></html>");
@@ -169,11 +179,13 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
         if (x !== ownerDocument.defaultView.pageXOffset || y !== ownerDocument.defaultView.pageYOffset) {
             ownerDocument.defaultView.scrollTo(x, y);
         }
+=======
 
         documentClone.open();
         documentClone.write("<!DOCTYPE html><html></html>");
         // Chrome scrolls the parent document for some reason after the write to the cloned window???
         restoreOwnerScroll(ownerDocument, x, y);
+>>>>>>> master
         documentClone.replaceChild(options.javascriptEnabled === true ? documentClone.adoptNode(documentElement) : removeScriptNodes(documentClone.adoptNode(documentElement)), documentClone.documentElement);
         documentClone.close();
     });

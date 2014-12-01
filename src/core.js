@@ -124,9 +124,12 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
     var documentElement = ownerDocument.documentElement.cloneNode(true),
         container = containerDocument.createElement("iframe");
 
+    container.className = "html2canvas-container";
     container.style.visibility = "hidden";
-    container.style.position = "absolute";
-    container.style.left = container.style.top = "-10000px";
+    container.style.position = "fixed";
+    container.style.left = "-10000px";
+    container.style.top = "0px";
+    container.style.border = "0";
     container.width = width;
     container.height = height;
     container.scrolling = "no"; // ios won't scroll without it
@@ -155,14 +158,17 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
 
         documentClone.open();
         documentClone.write("<!DOCTYPE html><html></html>");
-
         // Chrome scrolls the parent document for some reason after the write to the cloned window???
-        if (x !== ownerDocument.defaultView.pageXOffset || y !== ownerDocument.defaultView.pageYOffset) {
-            ownerDocument.defaultView.scrollTo(x, y);
-        }
+        restoreOwnerScroll(ownerDocument, x, y);
         documentClone.replaceChild(options.javascriptEnabled === true ? documentClone.adoptNode(documentElement) : removeScriptNodes(documentClone.adoptNode(documentElement)), documentClone.documentElement);
         documentClone.close();
     });
+}
+
+function restoreOwnerScroll(ownerDocument, x, y) {
+    if (x !== ownerDocument.defaultView.pageXOffset || y !== ownerDocument.defaultView.pageYOffset) {
+        ownerDocument.defaultView.scrollTo(x, y);
+    }
 }
 
 function loadUrlDocument(src, proxy, document, width, height, options) {

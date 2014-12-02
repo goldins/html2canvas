@@ -623,7 +623,7 @@ function renderDocument(document, options, windowWidth, windowHeight) {
 function renderWindow(node, container, options, windowWidth, windowHeight) {
     if(typeof options.modifyFn === "function") {
         try {
-            node = options.modifyFn(node)
+            node = options.modifyFn(node);
         } catch(e) {
             log(e);
         }

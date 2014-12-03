@@ -731,7 +731,7 @@ function createWindowClone(ownerDocument, containerDocument, width, height, opti
                     }
                     resolve(container);
                 }
-            }, 200);
+            }, 400);
         };
 
         var x = ownerDocument.defaultView.pageXOffset;

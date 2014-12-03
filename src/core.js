@@ -45,7 +45,14 @@ function renderDocument(document, options, windowWidth, windowHeight) {
         document.querySelector(selector).removeAttribute(html2canvasNodeAttribute);
         var clonedWindow = container.contentWindow;
         var node = clonedWindow.document.querySelector(selector);
-        var oncloneHandler = (typeof(options.onclone) === "function") ? Promise.resolve(options.onclone(clonedWindow.document)) : Promise.resolve(true);
+        var oncloneHandler;
+        if(typeof(options.onclone) !== "function") {
+            oncloneHandler = Promise.resolve(true);
+        } else if(options.type === "node") {
+            oncloneHandler = Promise.resolve(options.onclone(node));
+        } else {
+            oncloneHandler = Promise.resolve(options.onclone(clonedWindow.document));
+        }
         return oncloneHandler.then(function() {
             return renderWindow(node, container, options, windowWidth, windowHeight);
         });

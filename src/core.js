@@ -53,8 +53,12 @@ function renderDocument(document, options, windowWidth, windowHeight) {
         } else {
             oncloneHandler = Promise.resolve(options.onclone(clonedWindow.document));
         }
-        return oncloneHandler.then(function() {
-            return renderWindow(node, container, options, windowWidth, windowHeight);
+        return oncloneHandler.then(function(newNode) {
+            if(typeof(newNode) === 'object') {
+                return renderWindow(newNode, container, options, windowWidth, windowHeight);
+            } else {
+                return renderWindow(node, container, options, windowWidth, windowHeight);
+            }
         });
     });
 }
